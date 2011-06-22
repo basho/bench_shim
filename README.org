@@ -1,0 +1,24 @@
+* What is this?
+[[https://github.com/basho/basho_bench][basho_bench]] is Basho's most excellent key/value store benchmarking application. To simplyfy comparison with the erlang riak client I wrote this simple shim between basho_bench and the [[https://github.com/basho/riak-java-client][riak-java-client]].
+
+Running bench_shim allows you to benchmark riak with the riak-java-client (or benchmark the riak-java-client against Riak).
+
+* Usage
+
+You need Java and maven.
+
+#+BEGIN_SRC java
+  git clone git://github.com/russelldb/bench_shim.git
+  mvn clean install
+  mvn exec:java -Dexec.mainClass="com.basho.riak.bench.BenchDriverApp" -Dexec.classpathScope=runtime -Dexec.args="nodename@host.local MY_COOKIE"
+#+END_SRC
+
+This will start a local Jinterface node. You then need to configure your basho_bench installation to talk to this Java node.
+
+See the riakc_java.config file in the root of this repo for an example.
+
+* To do
+Lots, this is just a starter that drives the PB client. 
+
+1. HTTP/PB choice
+2. Better docs
