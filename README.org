@@ -1,5 +1,5 @@
 * What is this?
-[[https://github.com/basho/basho_bench][basho_bench]] is Basho's most excellent key/value store benchmarking application. To simplyfy comparison with the erlang riak client I wrote this simple shim between basho_bench and the [[https://github.com/basho/riak-java-client][riak-java-client]].
+[[https://github.com/basho/basho_bench][basho_bench]] is Basho's most excellent key/value store benchmarking application. To ease comparison with the erlang riak client I wrote this simple shim between basho_bench and the [[https://github.com/basho/riak-java-client][riak-java-client]].
 
 Running bench_shim allows you to benchmark riak with the riak-java-client (or benchmark the riak-java-client against Riak).
 
