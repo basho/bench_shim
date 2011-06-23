@@ -17,8 +17,6 @@ This will start a local Jinterface node. You then need to configure your basho_b
 
 See the riakc_java.config file in the root of this repo for an example.
 
-You will need *my* Java fork/branch of basho_bench for the time being (I'll try and get it accepted into basho master). You can find it [[https://github.com/russelldb/basho_bench/tree/java][here]].
-
 * To do
 Lots, this is just a starter that drives the PB client. 
 
