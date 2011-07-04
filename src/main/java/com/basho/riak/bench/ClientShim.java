@@ -21,8 +21,6 @@ import com.basho.riak.client.builders.RiakObjectBuilder;
 import com.basho.riak.client.raw.RawClient;
 import com.basho.riak.client.raw.RiakResponse;
 import com.basho.riak.client.raw.StoreMeta;
-import com.basho.riak.client.raw.pbc.PBClientAdapter;
-import com.basho.riak.pbc.RiakClient;
 import com.ericsson.otp.erlang.OtpErlangAtom;
 import com.ericsson.otp.erlang.OtpErlangDecodeException;
 import com.ericsson.otp.erlang.OtpErlangExit;
@@ -53,9 +51,11 @@ public class ClientShim implements Runnable {
      * @param port
      * @throws IOException
      */
-    public ClientShim(final OtpMbox mbox, String host, int port, int bufferSizeKb) throws IOException {
+    public ClientShim(final OtpMbox mbox, String host, int port, int bufferSizeKb, Transport transport)
+            throws IOException {
         this.mbox = mbox;
-        this.rawClient = new PBClientAdapter(new RiakClient(host, port, bufferSizeKb));
+        final ClientConfig clientConfig = new ClientConfig(host, port, transport, bufferSizeKb);
+        this.rawClient = ClientFactory.newClient(clientConfig);
         this.rawClient.generateAndSetClientId();
     }
 
@@ -79,8 +79,8 @@ public class ClientShim implements Runnable {
                 OtpErlangObject reply = null;
 
                 // TODO really could be just Args, amirite?
-                PutArgs putArgs = PutArgs.from(args);
-                GetArgs getArgs = GetArgs.from(args);
+                final PutArgs putArgs = PutArgs.from(args);
+                final GetArgs getArgs = GetArgs.from(args);
 
                 RiakObjectBuilder rob = RiakObjectBuilder.newBuilder(putArgs.getBucket(), putArgs.getKey());
 
@@ -156,7 +156,6 @@ public class ClientShim implements Runnable {
                 default:
                     throw new UnsupportedOperationException(op.name());
                 }
-
                 mbox.send(from, new OtpErlangTuple(new OtpErlangObject[] { mbox.self(), reply }));
             } catch (OtpErlangExit e) {
                 throw new RuntimeException(e);

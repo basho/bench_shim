@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.ericsson.otp.erlang.OtpErlangAtom;
 import com.ericsson.otp.erlang.OtpErlangDecodeException;
 import com.ericsson.otp.erlang.OtpErlangExit;
 import com.ericsson.otp.erlang.OtpErlangLong;
@@ -64,14 +65,16 @@ public class Factory implements Runnable {
                 OtpErlangObject reply;
                 int port;
                 int bufferSizeKb;
+                Transport transport;
 
                 try {
                     port = ((OtpErlangLong) payload.elementAt(1)).intValue();
-                    bufferSizeKb =  ((OtpErlangLong) payload.elementAt(2)).intValue();
+                    bufferSizeKb = ((OtpErlangLong) payload.elementAt(2)).intValue();
+                    transport = Transport.fromAtom((OtpErlangAtom) payload.elementAt(3));
 
                     try {
                         // create a new mbox and client, get a Pid to send back
-                        reply = newClientShim(host, port, bufferSizeKb);
+                        reply = newClientShim(host, port, bufferSizeKb, transport);
                     } catch (IOException e) {
                         // we couldn't create a client, tell the sender
                         reply = reply("error", e.toString());
@@ -135,11 +138,11 @@ public class Factory implements Runnable {
      *         handle messages for the new client
      * @throws IOException
      */
-    private OtpErlangPid newClientShim(final String host, final int port, final int bufferSizeKb) throws IOException {
+    private OtpErlangPid newClientShim(final String host, final int port, final int bufferSizeKb, final Transport transport) throws IOException {
         System.out.println("Spawning new mbox for " + host + ":" + port + " with buffer " + bufferSizeKb);
         OtpMbox mbox = node.createMbox();
         OtpErlangPid pid = mbox.self();
-        executorService.execute(new ClientShim(mbox, host, port, bufferSizeKb));
+        executorService.execute(new ClientShim(mbox, host, port, bufferSizeKb, transport));
         return pid;
     }
 }
