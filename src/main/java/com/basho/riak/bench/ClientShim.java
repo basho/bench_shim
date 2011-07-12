@@ -42,13 +42,20 @@ public class ClientShim implements Runnable {
 
     private final OtpMbox mbox;
     private final RawClient rawClient;
+    private final String host;
 
     /**
-     * TODO choice of client protocol (HTTP/PB) needs to be a parameter
-     * 
      * @param mbox
+     *            the {@link OtpMbox} that will receive messages from
+     *            basho_bench for this client
      * @param host
+     *            the host to connect to
      * @param port
+     *            the port to connect to
+     * @param bufferSizeKb
+     *            the pb buffer size
+     * @param transport
+     *            the {@link Transport} to create (http/pb)
      * @throws IOException
      */
     public ClientShim(final OtpMbox mbox, String host, int port, int bufferSizeKb, Transport transport)
@@ -57,6 +64,7 @@ public class ClientShim implements Runnable {
         final ClientConfig clientConfig = new ClientConfig(host, port, transport, bufferSizeKb);
         this.rawClient = ClientFactory.newClient(clientConfig);
         this.rawClient.generateAndSetClientId();
+        this.host = host;
     }
 
     /*
@@ -177,7 +185,7 @@ public class ClientShim implements Runnable {
         String eString = e.toString() + " b : " + putArgs.getBucket() + " k : " + putArgs.getKey();
         OtpErlangString reason = new OtpErlangString(eString);
 
-        System.out.println("sending error message " + eString);
+        System.out.println("sending error message for " + host + " :: " + eString);
         return new OtpErlangTuple(new OtpErlangObject[] { error, reason });
     }
 

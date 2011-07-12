@@ -15,6 +15,7 @@ package com.basho.riak.bench;
 
 import java.io.IOException;
 
+import com.basho.riak.client.http.RiakConfig;
 import com.basho.riak.client.raw.RawClient;
 import com.basho.riak.client.raw.http.HTTPClientAdapter;
 import com.basho.riak.client.raw.pbc.PBClientAdapter;
@@ -40,7 +41,9 @@ public class ClientFactory {
             client = new PBClientAdapter(new RiakClient(config.getHost(), config.getPort(), config.getBufferSizeKb()));
             break;
         case HTTP:
-            client = new HTTPClientAdapter(makeUrl(config.getHost(), config.getPort()));
+            RiakConfig conf = new RiakConfig(makeUrl(config.getHost(), config.getPort()));
+            com.basho.riak.client.http.RiakClient del = new com.basho.riak.client.http.RiakClient(conf);
+            client = new HTTPClientAdapter(del);
             break;
         default:
             throw new RuntimeException("unknown transport " + transport);
