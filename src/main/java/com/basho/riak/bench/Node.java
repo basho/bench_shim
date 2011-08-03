@@ -13,22 +13,34 @@
  */
 package com.basho.riak.bench;
 
-import com.ericsson.otp.erlang.OtpErlangAtom;
-
 /**
- * @author russell
+ * Container for host and port pairs.
+ *
+ * @author kellymclaughlin
  *
  */
-public enum Transport {
+public class Node {
+    private String host;
+    private int port;
 
-    HTTP, PB, HTTPCLUSTER, PBCLUSTER;
-
-    /**
-     * @param elementAt
-     * @return
-     */
-    public static Transport fromAtom(OtpErlangAtom atom) {
-        return Transport.valueOf(atom.atomValue().toUpperCase());
+    Node(String host, int port)   {
+        this.host = host;
+        this.port = port;
     }
 
+    public String getHost() {
+        return host;
+    }
+
+    public int getPort()    {
+        return port;
+    }
+
+    public void setHost(String host)    {
+        this.host = host;
+    }
+
+    public void setPort(int port)   {
+        this.port = port;
+    }
 }
