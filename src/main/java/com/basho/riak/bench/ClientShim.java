@@ -2,9 +2,9 @@
  * This file is provided to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -16,11 +16,19 @@ package com.basho.riak.bench;
 import static com.basho.riak.bench.OtpMessageHelper.reply;
 
 import java.io.IOException;
+import java.util.ArrayList;
 
-import com.basho.riak.client.builders.RiakObjectBuilder;
+import com.basho.riak.client.IRiakClient;
+import com.basho.riak.client.IRiakObject;
+import com.basho.riak.client.RiakException;
+import com.basho.riak.client.RiakFactory;
+import com.basho.riak.client.RiakRetryFailedException;
+import com.basho.riak.client.bucket.Bucket;
 import com.basho.riak.client.raw.RawClient;
-import com.basho.riak.client.raw.RiakResponse;
-import com.basho.riak.client.raw.StoreMeta;
+import com.basho.riak.client.raw.http.HTTPClientConfig;
+import com.basho.riak.client.raw.http.HTTPClusterConfig;
+import com.basho.riak.client.raw.pbc.PBClientConfig;
+import com.basho.riak.client.raw.pbc.PBClusterConfig;
 import com.ericsson.otp.erlang.OtpErlangAtom;
 import com.ericsson.otp.erlang.OtpErlangDecodeException;
 import com.ericsson.otp.erlang.OtpErlangExit;
@@ -34,14 +42,14 @@ import com.ericsson.otp.erlang.OtpMbox;
 /**
  * Wraps an {@link OtpMbox} and a {@link RawClient}, handles comms between the
  * two
- * 
+ *
  * @author russell
- * 
+ *
  */
 public class ClientShim implements Runnable {
 
     private final OtpMbox mbox;
-    private final RawClient rawClient;
+    private final IRiakClient riakClient;
     private final String host;
 
     /**
@@ -55,21 +63,76 @@ public class ClientShim implements Runnable {
      * @param bufferSizeKb
      *            the pb buffer size
      * @param transport
-     *            the {@link Transport} to create (http/pb)
+     *            the {@link Transport} to create (http/pb/httpcluster/pbcluster)
      * @throws IOException
+     * @throws RiakException
      */
     public ClientShim(final OtpMbox mbox, String host, int port, int bufferSizeKb, Transport transport)
-            throws IOException {
+            throws IOException, RiakException {
         this.mbox = mbox;
-        final ClientConfig clientConfig = new ClientConfig(host, port, transport, bufferSizeKb);
-        this.rawClient = ClientFactory.newClient(clientConfig);
-        this.rawClient.generateAndSetClientId();
+        switch (transport) {
+        case PB:
+            final PBClientConfig pbClientConf = new PBClientConfig.Builder().withHost(host).withPort(port).withSocketBufferSizeKb(bufferSizeKb).build();
+            this.riakClient = RiakFactory.newClient(pbClientConf);
+            break;
+        case HTTP:
+            final HTTPClientConfig httpClientConf = new HTTPClientConfig.Builder().withHost(host).withPort(port).build();
+            this.riakClient = RiakFactory.newClient(httpClientConf);
+            break;
+        default:
+            throw new RuntimeException("unknown transport " + transport);
+        }
+
+        this.riakClient.generateAndSetClientId();
         this.host = host;
+    }
+
+    /**
+     * @param mbox
+     *            the {@link OtpMbox} that will receive messages from
+     *            basho_bench for this client
+     * @param nodes
+     *            the set of nodes to use for a cluster
+     * @param bufferSizeKb
+     *            the pb buffer size
+     * @param transport
+     *            the {@link Transport} to create (httpcluster/pbcluster)
+     * @throws IOException
+     * @throws RiakException
+     */
+    public ClientShim(final OtpMbox mbox, ArrayList<Node> nodes, int bufferSizeKb, Transport transport)
+            throws IOException, RiakException {
+        this.mbox = mbox;
+        this.host = null;
+        switch (transport) {
+        case PB:
+        case PBCLUSTER:
+            final PBClusterConfig pbClusterConf = new PBClusterConfig(nodes.size());
+            for (Node node : nodes) {
+                PBClientConfig nodeConf = new PBClientConfig.Builder().withHost(node.getHost()).withPort(node.getPort()).withSocketBufferSizeKb(bufferSizeKb).build();
+                pbClusterConf.addClient(nodeConf);
+            }
+            this.riakClient = RiakFactory.newClient(pbClusterConf);
+            break;
+        case HTTP:
+        case HTTPCLUSTER:
+            final HTTPClusterConfig httpClusterConf = new HTTPClusterConfig(nodes.size());
+            for (Node node : nodes) {
+                HTTPClientConfig nodeConf = new HTTPClientConfig.Builder().withHost(node.getHost()).withPort(node.getPort()).build();
+                httpClusterConf.addClient(nodeConf);
+            }
+            this.riakClient = RiakFactory.newClient(httpClusterConf);
+            break;
+        default:
+            throw new RuntimeException("unknown transport " + transport);
+        }
+
+        this.riakClient.generateAndSetClientId();
     }
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see java.lang.Runnable#run()
      */
     public void run() {
@@ -90,15 +153,13 @@ public class ClientShim implements Runnable {
                 final PutArgs putArgs = PutArgs.from(args);
                 final GetArgs getArgs = GetArgs.from(args);
 
-                RiakObjectBuilder rob = RiakObjectBuilder.newBuilder(putArgs.getBucket(), putArgs.getKey());
-
                 switch (op) {
                 case GET:
                     try {
+                        Bucket bucket = riakClient.createBucket(getArgs.getBucket()).execute();
+                        IRiakObject object = bucket.fetch(getArgs.getKey()).r(getArgs.getR()).execute();
 
-                        RiakResponse response = rawClient.fetch(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
-
-                        if (response == null || (!response.hasValue() && response.getVclock() == null)) {
+                        if (object == null || ((object.getValue() == null) && (object.getVClock() == null))) {
                             // send not found
                             reply = reply("ok", "notfound");
                         } else {
@@ -112,8 +173,11 @@ public class ClientShim implements Runnable {
                     break;
                 case PUT:
                     try {
-                        rawClient.store(rob.withValue(putArgs.getValue()).build(),
-                                        new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
+                        Bucket bucket = riakClient.createBucket(putArgs.getBucket()).execute();
+                        bucket.store(putArgs.getKey(), putArgs.getValue())
+                        .w(putArgs.getW())
+                        .dw(putArgs.getDw())
+                        .returnBody(false);
                         reply = reply("ok");
                     } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);
@@ -121,24 +185,34 @@ public class ClientShim implements Runnable {
                     break;
                 case DELETE:
                     try {
-                        rawClient.delete(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
+                        Bucket bucket = riakClient.createBucket(getArgs.getBucket()).execute();
+                        bucket.delete(getArgs.getKey()).rw(getArgs.getR()).execute();
                         reply = reply("ok");
-                    } catch (IOException e) {
+                    } catch (RiakRetryFailedException e) {
                         reply = errorReply(e, putArgs, getArgs);
-
                     }
                     break;
                 case CREATE_UPDATE:
                     try {
-                        RiakResponse response = rawClient.fetch(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
+                        Bucket bucket = riakClient.createBucket(getArgs.getBucket()).execute();
+                        IRiakObject object = bucket.fetch(getArgs.getKey()).r(getArgs.getR()).execute();
 
-                        rob.withValue(putArgs.getValue());
-
-                        if (response != null && (response.hasValue() && response.getVclock() != null)) {
-                            rob.withVClock(response.getVclock()).build();
+                        if (object == null || ((object.getValue() == null) && (object.getVClock() == null))) {
+                            // send not found
+                            reply = reply("ok", "notfound");
+                        } else {
+                            // send found message back
+                            reply = reply("ok", "found");
                         }
 
-                        rawClient.store(rob.build(), new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
+                        if (object != null && ((object.getValue() != null) && (object.getVClock() != null))) {
+                            bucket.store(getArgs.getKey(), putArgs.getValue())
+                            .w(putArgs.getW())
+                            .dw(putArgs.getDw())
+                            .returnBody(false)
+                            .execute();
+                        }
+
                         reply = reply("ok");
                     } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);
@@ -147,13 +221,18 @@ public class ClientShim implements Runnable {
                     break;
                 case UPDATE:
                     try {
-                        RiakResponse response = rawClient.fetch(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
-                        if (response == null || (!response.hasValue() && response.getVclock() == null)) {
+                        Bucket bucket = riakClient.createBucket(getArgs.getBucket()).execute();
+                        IRiakObject object = bucket.fetch(getArgs.getKey()).r(getArgs.getR()).execute();
+
+                        if (object == null || ((object.getValue() == null) && (object.getVClock() == null))) {
+                            // send not found
                             reply = reply("error", "notfound");
                         } else {
-                            rob.withValue(putArgs.getValue());
-                            rawClient.store(rob.withVClock(response.getVclock()).build(),
-                                            new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
+                            bucket.store(getArgs.getKey(), putArgs.getValue())
+                            .w(putArgs.getW())
+                            .dw(putArgs.getDw())
+                            .returnBody(false)
+                            .execute();
                             reply = reply("ok");
                         }
                     } catch (Exception e) {
@@ -166,7 +245,7 @@ public class ClientShim implements Runnable {
                 }
                 mbox.send(from, new OtpErlangTuple(new OtpErlangObject[] { mbox.self(), reply }));
             } catch (OtpErlangExit e) {
-                throw new RuntimeException(e);
+                System.out.println(e.pid().toString() + " has exited with reason: " + e.reason().toString());
             } catch (OtpErlangDecodeException e) {
                 throw new RuntimeException(e);
             }
