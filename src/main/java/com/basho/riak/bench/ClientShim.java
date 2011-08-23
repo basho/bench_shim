@@ -17,10 +17,11 @@ import static com.basho.riak.bench.OtpMessageHelper.reply;
 
 import java.io.IOException;
 
-import com.basho.riak.client.builders.RiakObjectBuilder;
-import com.basho.riak.client.raw.RawClient;
-import com.basho.riak.client.raw.RiakResponse;
-import com.basho.riak.client.raw.StoreMeta;
+import com.basho.riak.client.RiakClient;
+import com.basho.riak.client.RiakObject;
+import com.basho.riak.client.request.RequestMeta;
+import com.basho.riak.client.response.FetchResponse;
+import com.basho.riak.client.response.StoreResponse;
 import com.ericsson.otp.erlang.OtpErlangAtom;
 import com.ericsson.otp.erlang.OtpErlangDecodeException;
 import com.ericsson.otp.erlang.OtpErlangExit;
@@ -41,7 +42,7 @@ import com.ericsson.otp.erlang.OtpMbox;
 public class ClientShim implements Runnable {
 
     private final OtpMbox mbox;
-    private final RawClient rawClient;
+    private final RiakClient client;
     private final String host;
 
     /**
@@ -62,8 +63,7 @@ public class ClientShim implements Runnable {
             throws IOException {
         this.mbox = mbox;
         final ClientConfig clientConfig = new ClientConfig(host, port, transport, bufferSizeKb);
-        this.rawClient = ClientFactory.newClient(clientConfig);
-        this.rawClient.generateAndSetClientId();
+        this.client = ClientFactory.newClient(clientConfig);
         this.host = host;
     }
 
@@ -90,20 +90,21 @@ public class ClientShim implements Runnable {
                 final PutArgs putArgs = PutArgs.from(args);
                 final GetArgs getArgs = GetArgs.from(args);
 
-                RiakObjectBuilder rob = RiakObjectBuilder.newBuilder(putArgs.getBucket(), putArgs.getKey());
-
                 switch (op) {
                 case GET:
                     try {
 
-                        RiakResponse response = rawClient.fetch(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
+                        FetchResponse response = client.fetch(getArgs.getBucket(), getArgs.getKey(),
+                                                              RequestMeta.readParams(getArgs.getR()));
 
-                        if (response == null || (!response.hasValue() && response.getVclock() == null)) {
+                        if (response.getStatusCode() == 404) {
                             // send not found
                             reply = reply("ok", "notfound");
-                        } else {
+                        } else if (response.isSuccess()) {
                             // send found message back
                             reply = reply("ok", "found");
+                        } else {
+                            reply = errorReply(new Exception(response.getBodyAsString()), putArgs, getArgs);
                         }
                     } catch (Exception e) {
                         // send error message
@@ -112,34 +113,48 @@ public class ClientShim implements Runnable {
                     break;
                 case PUT:
                     try {
-                        rawClient.store(rob.withValue(putArgs.getValue()).build(),
-                                        new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
-                        reply = reply("ok");
+                        StoreResponse resp = client.store(new RiakObject(putArgs.getBucket(), putArgs.getKey(),
+                                                                         putArgs.getValue()),
+                                                          RequestMeta.writeParams(putArgs.getW(), putArgs.getDw()));
+
+                        if (resp.isSuccess()) {
+                            reply = reply("ok");
+                        } else {
+                            reply = errorReply(new Exception(resp.getBodyAsString()), putArgs, getArgs);
+                        }
                     } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);
                     }
                     break;
                 case DELETE:
                     try {
-                        rawClient.delete(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
+                        client.delete(getArgs.getBucket(), getArgs.getKey(), RequestMeta.readParams(getArgs.getR()));
                         reply = reply("ok");
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);
 
                     }
                     break;
                 case CREATE_UPDATE:
                     try {
-                        RiakResponse response = rawClient.fetch(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
+                        RiakObject obj = null;
+                        FetchResponse response = client.fetch(getArgs.getBucket(), getArgs.getKey(),
+                                                              RequestMeta.readParams(getArgs.getR()));
 
-                        rob.withValue(putArgs.getValue());
-
-                        if (response != null && (response.hasValue() && response.getVclock() != null)) {
-                            rob.withVClock(response.getVclock()).build();
+                        if (response != null && response.hasObject()) {
+                            obj = response.getObject();
+                            obj.setValue(putArgs.getValue());
+                        } else {
+                            obj = new RiakObject(putArgs.getBucket(), putArgs.getKey(), putArgs.getValue());
                         }
 
-                        rawClient.store(rob.build(), new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
-                        reply = reply("ok");
+                        StoreResponse resp = client.store(obj, RequestMeta.writeParams(putArgs.getW(), putArgs.getDw()));
+                        
+                        if (resp.isSuccess()) {
+                            reply = reply("ok");
+                        } else {
+                            reply = errorReply(new Exception(resp.getBodyAsString()), putArgs, getArgs);
+                        }
                     } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);
                     }
@@ -147,14 +162,22 @@ public class ClientShim implements Runnable {
                     break;
                 case UPDATE:
                     try {
-                        RiakResponse response = rawClient.fetch(getArgs.getBucket(), getArgs.getKey(), getArgs.getR());
-                        if (response == null || (!response.hasValue() && response.getVclock() == null)) {
+                        FetchResponse response = client.fetch(getArgs.getBucket(), getArgs.getKey(),
+                                                              RequestMeta.readParams(getArgs.getR()));
+                        
+                        if (!response.hasObject()) {
                             reply = reply("error", "notfound");
                         } else {
-                            rob.withValue(putArgs.getValue());
-                            rawClient.store(rob.withVClock(response.getVclock()).build(),
-                                            new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
-                            reply = reply("ok");
+                            RiakObject obj = response.getObject();
+                            obj.setValue(putArgs.getValue());
+                            
+                            StoreResponse resp = client.store(obj, RequestMeta.writeParams(putArgs.getW(), putArgs.getDw()));
+                            
+                            if (resp.isSuccess()) {
+                                reply = reply("ok");
+                            } else {
+                                reply = errorReply(new Exception(resp.getBodyAsString()), putArgs, getArgs);
+                            }
                         }
                     } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);

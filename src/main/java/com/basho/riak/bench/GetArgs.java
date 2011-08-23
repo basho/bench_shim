@@ -17,7 +17,7 @@ import java.util.Arrays;
 
 import org.apache.commons.codec.binary.Base64;
 
-import com.basho.riak.client.util.CharsetUtils;
+import com.basho.riak.client.util.ClientUtils;
 import com.ericsson.otp.erlang.OtpErlangAtom;
 import com.ericsson.otp.erlang.OtpErlangBinary;
 import com.ericsson.otp.erlang.OtpErlangList;
@@ -58,14 +58,14 @@ public class GetArgs {
      * @return the bucket
      */
     public String getBucket() {
-        return CharsetUtils.asString(Base64.encodeBase64Chunked(bucket), CharsetUtils.ISO_8859_1);
+        return new String(Base64.encodeBase64Chunked(bucket), ClientUtils.ISO_8859_1);
     }
 
     /**
      * @return the key
      */
     public String getKey() {
-        return CharsetUtils.asString(Base64.encodeBase64Chunked(key), CharsetUtils.ISO_8859_1);
+        return new String(Base64.encodeBase64Chunked(key), ClientUtils.ISO_8859_1);
     }
 
     /**

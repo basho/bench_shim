@@ -16,11 +16,8 @@ package com.basho.riak.bench;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.basho.riak.client.http.RiakConfig;
-import com.basho.riak.client.raw.RawClient;
-import com.basho.riak.client.raw.http.HTTPClientAdapter;
-import com.basho.riak.client.raw.pbc.PBClientAdapter;
-import com.basho.riak.pbc.RiakClient;
+import com.basho.riak.client.RiakConfig;
+import com.basho.riak.client.RiakClient;
 
 /**
  * @author russell
@@ -28,14 +25,11 @@ import com.basho.riak.pbc.RiakClient;
  */
 public class ClientFactory {
 
-    private static final ConcurrentHashMap<String, RawClient> HTTP_CLIENTS = new ConcurrentHashMap<String, RawClient>();
-    
-    private static final RawClient httpClient;
-    
+    private static final RiakClient httpClient;
+
     static {
         RiakConfig conf = new RiakConfig(makeUrl("den-test-01.den.basho", 80));
-        com.basho.riak.client.http.RiakClient delegate = new com.basho.riak.client.http.RiakClient(conf);
-        httpClient = new HTTPClientAdapter(delegate);
+        httpClient = new RiakClient(conf);
     }
 
     /**
@@ -43,28 +37,14 @@ public class ClientFactory {
      * @return
      * @throws IOException
      */
-    public static RawClient newClient(ClientConfig config) throws IOException {
-        RawClient client = null;
+    public static RiakClient newClient(ClientConfig config) throws IOException {
+        RiakClient client = null;
         Transport transport = config.getTransport();
 
         switch (transport) {
         case PB:
-            client = new PBClientAdapter(new RiakClient(config.getHost(), config.getPort(), config.getBufferSizeKb()));
-            break;
+            throw new UnsupportedOperationException("Only HTTP for 0.14.1 builds");
         case HTTP:
-//            String key = config.getHost() + ":" + config.getPort();
-//            RawClient cachedClient = HTTP_CLIENTS.get(key);
-//            if (cachedClient == null) {
-//                RiakConfig conf = new RiakConfig(makeUrl(config.getHost(), config.getPort()));
-//                com.basho.riak.client.http.RiakClient del = new com.basho.riak.client.http.RiakClient(conf);
-//                client = new HTTPClientAdapter(del);
-//                
-//                client = HTTP_CLIENTS.putIfAbsent(key, cachedClient);
-//                if(client == null) {
-//                    client = cachedClient;
-//                }
-//                
-//            }
             client = httpClient;
             break;
         default:
