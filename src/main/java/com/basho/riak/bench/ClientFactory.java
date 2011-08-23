@@ -14,6 +14,7 @@
 package com.basho.riak.bench;
 
 import java.io.IOException;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.basho.riak.client.http.RiakConfig;
 import com.basho.riak.client.raw.RawClient;
@@ -26,6 +27,16 @@ import com.basho.riak.pbc.RiakClient;
  * 
  */
 public class ClientFactory {
+
+    private static final ConcurrentHashMap<String, RawClient> HTTP_CLIENTS = new ConcurrentHashMap<String, RawClient>();
+    
+    private static final RawClient httpClient;
+    
+    static {
+        RiakConfig conf = new RiakConfig(makeUrl("den-test-01.den.basho", 80));
+        com.basho.riak.client.http.RiakClient delegate = new com.basho.riak.client.http.RiakClient(conf);
+        httpClient = new HTTPClientAdapter(delegate);
+    }
 
     /**
      * @param config
@@ -41,9 +52,20 @@ public class ClientFactory {
             client = new PBClientAdapter(new RiakClient(config.getHost(), config.getPort(), config.getBufferSizeKb()));
             break;
         case HTTP:
-            RiakConfig conf = new RiakConfig(makeUrl(config.getHost(), config.getPort()));
-            com.basho.riak.client.http.RiakClient del = new com.basho.riak.client.http.RiakClient(conf);
-            client = new HTTPClientAdapter(del);
+//            String key = config.getHost() + ":" + config.getPort();
+//            RawClient cachedClient = HTTP_CLIENTS.get(key);
+//            if (cachedClient == null) {
+//                RiakConfig conf = new RiakConfig(makeUrl(config.getHost(), config.getPort()));
+//                com.basho.riak.client.http.RiakClient del = new com.basho.riak.client.http.RiakClient(conf);
+//                client = new HTTPClientAdapter(del);
+//                
+//                client = HTTP_CLIENTS.putIfAbsent(key, cachedClient);
+//                if(client == null) {
+//                    client = cachedClient;
+//                }
+//                
+//            }
+            client = httpClient;
             break;
         default:
             throw new RuntimeException("unknown transport " + transport);
