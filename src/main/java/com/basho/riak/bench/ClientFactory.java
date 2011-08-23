@@ -26,6 +26,15 @@ import com.basho.riak.pbc.RiakClient;
  * 
  */
 public class ClientFactory {
+    
+    private static final RawClient httpClient;
+    
+    static {
+        RiakConfig conf = new RiakConfig(makeUrl("den-test-01.den.basho", 8098));
+        conf.setMaxConnections(500);
+        httpClient = new HTTPClientAdapter(new com.basho.riak.client.http.RiakClient(conf));
+    }
+
 
     /**
      * @param config
@@ -41,9 +50,7 @@ public class ClientFactory {
             client = new PBClientAdapter(new RiakClient(config.getHost(), config.getPort(), config.getBufferSizeKb()));
             break;
         case HTTP:
-            RiakConfig conf = new RiakConfig(makeUrl(config.getHost(), config.getPort()));
-            com.basho.riak.client.http.RiakClient del = new com.basho.riak.client.http.RiakClient(conf);
-            client = new HTTPClientAdapter(del);
+            client = httpClient;
             break;
         default:
             throw new RuntimeException("unknown transport " + transport);
