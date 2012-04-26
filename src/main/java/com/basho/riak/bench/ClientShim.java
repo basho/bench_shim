@@ -113,7 +113,7 @@ public class ClientShim implements Runnable {
                 case PUT:
                     try {
                         rawClient.store(rob.withValue(putArgs.getValue()).build(),
-                                        new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
+                                        new StoreMeta(putArgs.getW(), putArgs.getDw(), null, false, false, false));
                         reply = reply("ok");
                     } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);
@@ -138,7 +138,7 @@ public class ClientShim implements Runnable {
                             rob.withVClock(response.getVclock()).build();
                         }
 
-                        rawClient.store(rob.build(), new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
+                        rawClient.store(rob.build(), new StoreMeta(putArgs.getW(), putArgs.getDw(), null, false, false, false));
                         reply = reply("ok");
                     } catch (Exception e) {
                         reply = errorReply(e, putArgs, getArgs);
@@ -153,7 +153,7 @@ public class ClientShim implements Runnable {
                         } else {
                             rob.withValue(putArgs.getValue());
                             rawClient.store(rob.withVClock(response.getVclock()).build(),
-                                            new StoreMeta(putArgs.getW(), putArgs.getDw(), false));
+                                            new StoreMeta(putArgs.getW(), putArgs.getDw(), null, false, false, false));
                             reply = reply("ok");
                         }
                     } catch (Exception e) {
