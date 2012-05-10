@@ -8,7 +8,7 @@ Running bench_shim allows you to benchmark riak with the riak-java-client (or be
 You need Java and maven.
 
 #+BEGIN_SRC java
-  git clone git://github.com/russelldb/bench_shim.git
+  git clone git://github.com/basho/bench_shim.git
   mvn clean install
   mvn exec:java -Dexec.mainClass="com.basho.riak.bench.BenchShimApp" -Dexec.classpathScope=runtime -Dexec.args="nodename@host.local MY_COOKIE"
 #+END_SRC
